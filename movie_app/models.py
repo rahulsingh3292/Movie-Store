@@ -15,7 +15,6 @@ class Language(models.Model):
   name = models.CharField(max_length=200)
   country = models.CharField(max_length=150,choices=COUNTRY)
   
-  
   def __str__(self):
     return self.name 
  
@@ -43,6 +42,7 @@ class Movie(models.Model):
   release_date = models.DateField(auto_now_add=True,blank=True,null=True)
   length = models.TimeField(blank=True,null=True)
   photo = models.ImageField(upload_to="Images/",blank=True,null=True)
+  country = models.CharField(max_length=200,choices=COUNTRY,blank=True)
   
   def __str__(self):
     return self.name 
@@ -51,7 +51,6 @@ class Movie(models.Model):
     return str([i.name for i in self.category.all()])
   
       
-  
   
 class MyMovies(models.Model):
   movie = models.ForeignKey(Movie,on_delete=models.SET_NULL,null=True)
@@ -86,8 +85,6 @@ class Reply(CommentCommon):
   def __str__(self):
     return self.description[0:30]
   
-  
-
 
 class Payment(models.Model):
   user = models.ForeignKey(User,on_delete=models.CASCADE)
@@ -104,4 +101,35 @@ class Payment(models.Model):
   
   def __str__(self):
     return self.user.username 
+
+
+SUBSCRIPTION_PLANS = (
+   ("one-month","one-month"),
+   ("one-year","one-year"),
+   ("one-week","one-week"),
+  )
   
+SUBSCRIPTION_PRICE = (
+  ("199.99","199.99"),
+  ("399.99","399.99"),
+  ("999.99","999.99")
+  )
+
+
+class Subscription(models.Model):
+  plan = models.CharField(max_length=100,choices=SUBSCRIPTION_PLANS)
+  price = models.CharField(max_length=50,choices=SUBSCRIPTION_PRICE)
+  discount = models.FloatField(default=0.00)
+  description = models.TextField(blank=True)
+  
+  def __str__(self):
+    return f"{self.plan} -> {self.price}"
+  
+class MySubscription(models.Model):
+  user = models.ForeignKey(User,on_delete=models.CASCADE)
+  payment = models.ForeignKey(Payment,on_delete=models.SET_NULL,null=True)
+  subscription = models.ForeignKey(Subscription,on_delete=models.SET_NULL,null=True)
+  expire = models.DateTimeField()
+  
+  def __str__(self):
+    return self.user.username 

@@ -29,4 +29,16 @@ class CommentAdmin(admin.ModelAdmin):
   
 @admin.register(Reply)
 class Reply(admin.ModelAdmin):
-  list_display =["id","movie","user","comment","__str__"]
+  list_display =["id","movie","user","comment","__str__"] 
+  
+@admin.register(Language)
+class LanguageAdmin(admin.ModelAdmin):
+  list_display = ["id","name"]
+
+@admin.register(Subscription)
+class SubscriptionAdmin(admin.ModelAdmin):
+  list_display =["id","price","plan"]
+
+@admin.register(MySubscription)
+class MySubscriptionAdmin(admin.ModelAdmin):
+  list_display=["id","user","payment","subscription","expire"]

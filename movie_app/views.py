@@ -1,33 +1,102 @@
-from django.shortcuts import render 
+from django.shortcuts import render,redirect 
 from django.http import HttpResponse,JsonResponse
 from django.contrib.auth.models import User 
 import random 
+from datetime import timedelta
+from django.utils import timezone 
 from rest_framework.generics import (ListAPIView,CreateAPIView,RetrieveAPIView,RetrieveUpdateAPIView,DestroyAPIView)
 from rest_framework.views import APIView
-from  .models import (Movie,Category,Actors,Language,Payment,MyMovies,Comment,Reply)
+from  .models import (Movie,Category,Actors,Language,Payment,MyMovies,Comment,Reply,User,MySubscription,Subscription)
 from  .import paytm 
-from  .serializers import (MovieSerializer ,CategorySerilaizer,ActorSerializer,LanguageSerilaizer,PaymentHistorySerializer,CommentSerializer,ReplySerializer)
-from  .detail_serializers import (CommentDetailSerializer,ReplyDetailSerializer,MovieDetailSerializer,MyMoviesSerializer)
-
+from  .serializers import (MovieSerializer ,CategorySerilaizer,ActorSerializer,LanguageSerilaizer,PaymentHistorySerializer,CommentSerializer,UserSerializer,ReplySerializer,SubscriptionSerializer)
+from  .detail_serializers import (CommentDetailSerializer,ReplyDetailSerializer,MovieDetailSerializer,MyMoviesSerializer,MySubscriptionSerializer)
 from django.views.generic import View,TemplateView 
 from  django.conf import settings 
 from  django.views.decorators.csrf import csrf_exempt 
-from rest_framework.authentication import BasicAuthentication 
+from rest_framework.authentication import TokenAuthentication
 from rest_framework.permissions import IsAdminUser,IsAuthenticated
 from rest_framework.response import Response 
-
+from rest_framework.filters import SearchFilter
+from rest_framework.authtoken.models  import Token
+from django.contrib.auth import authenticate
 # Create your views here
+
+def get_or_generate_token(user):
+  token = Token.objects.filter(user=user)
+  if token.exists():
+    return token.first().key 
+  token = Token(user=user) 
+  token.save() 
+  return token.key 
+
+
+class UserLoginView(APIView):
+  http_method_names=["post"]
+  def post(self,request,format=None):
+    username = request.data.get("username")
+    password = request.data.get("password")
+    user = authenticate(request,username=username,password=password)
+    if user is not None:
+      token = get_or_generate_token(user)
+      return Response({"result":"success","token":token},status=200)
+    return Response({"result":"Invalid Credentials provided"},status=401)
+    
+    
+
+
+class UserCreateView(CreateAPIView):
+  serializer_class = UserSerializer
+  queryset = User.objects.all() 
+
+class UserUpdateView(RetrieveUpdateAPIView):
+  serializer_class = UserSerializer 
+  queryset = User.objects.all() 
+  authentication_classes=[TokenAuthentication]
+  permission_classes =[IsAuthenticated]
+  
+
+class UserDeleteView(DestroyAPIView):
+  serializer_class = UserSerializer 
+  queryset = User.objects.all() 
+  authentication_classes =[TokenAuthentication]
+  permission_classes =[IsAdminUser,IsAuthenticated]
+
+
+class UserDetailView(RetrieveAPIView):
+  authentication_classes =[TokenAuthentication]
+  permission_classes = [IsAuthenticated]
+  
+  def get_object(self,*args,**kwargs):
+    instance = User.objects.filter(id=self.kwargs["pk"])
+    if instance.exists():
+      instance = instance.first() 
+      if instance == self.request.user:
+        return instance
+      return 403 
+    return 404 
+      
+  
+  def retrieve(self,request,*args,**kwargs):
+    instance = self.get_object() 
+    if instance == 404:
+      return Response(status=404)
+    if instance == 403:
+      return Response(status=403)
+      
+    serializer = UserSerializer(instance)
+    return Response(serializer.data,status=200)
+  
 
 class ActorCreateView(CreateAPIView):
   serializer_class = ActorSerializer 
   queryset = Actors.objects.all()
-  authentication_classes=[BasicAuthentication]
+  authentication_classes=[TokenAuthentication]
   permission_classes =[IsAuthenticated,IsAdminUser]
 
 class ActorUpdateView(RetrieveUpdateAPIView):
   serializer_class = ActorSerializer
   queryset = Actors.objects.all() 
-  authentication_classes=[BasicAuthentication]
+  authentication_classes=[TokenAuthentication]
   permission_classes = [IsAdminUser,IsAuthenticated]
 
 class ActorDetailView(RetrieveAPIView):
@@ -51,32 +120,44 @@ class ActorListView(ListAPIView):
   serializer_class = ActorSerializer
   queryset = Actors.objects.all()
 
-
+class ActorDeleteView(DestroyAPIView):
+  serializer_class = ActorSerializer 
+  queryset = Actors.objects.all()
+  authentication_classes =[TokenAuthentication]
+  permission_classes=[IsAuthenticated,IsAdminUser]
+  
 class LanguageCreateView(CreateAPIView):
   serializer_class = LanguageSerilaizer
   queryset = Language.objects.all()
-  authentication_classes=[BasicAuthentication]
+  authentication_classes=[TokenAuthentication]
   permission_classes =[IsAuthenticated,IsAdminUser]
   
 
 class LanguageUpdateView(RetrieveUpdateAPIView):
   serializer_class = LanguageSerilaizer
   queryset = Language.objects.all() 
-  authentication_classes=[BasicAuthentication]
+  authentication_classes=[TokenAuthentication]
   permission_classes=[IsAdminUser,IsAuthenticated]
   lookup_field = "name"
   
-  
+class LanguageDeleteView(DestroyAPIView):
+  serializer_class = LanguageSerilaizer
+  queryset = Language.objects.all()
+  authentication_classes=[TokenAuthentication]
+  permission_classes=[IsAuthenticated,IsAdminUser]
+  lookup_field = "name"
+
+
 class CategoryCreateView(CreateAPIView):
   serializer_class = CategorySerilaizer
   queryset = Category.objects.all()
-  authentication_classes=[BasicAuthentication]
+  authentication_classes=[TokenAuthentication]
   permission_classes =[IsAuthenticated,IsAdminUser]
 
 class CategoryUpdateView(RetrieveUpdateAPIView):
   serializer_class = CategorySerilaizer 
   queryset = Category.objects.all()
-  authentication_classes=[BasicAuthentication]
+  authentication_classes=[TokenAuthentication]
   permission_classes =[IsAdminUser,IsAuthenticated]
   lookup_field = "name"
 
@@ -88,7 +169,7 @@ class CategoryListView(ListAPIView):
 class CategoryDeleteView(DestroyAPIView):
   serializer_class = CategorySerilaizer
   queryset = Category.objects.all()
-  authentication_classes=[BasicAuthentication]
+  authentication_classes=[TokenAuthentication]
   permission_classes = [IsAuthenticated,IsAdminUser]
   lookup_field = "name"
   
@@ -100,7 +181,7 @@ class MovieListView(ListAPIView):
 class MovieCreateView(CreateAPIView):
   queryset = Movie.objects.all() 
   serializer_class = MovieSerializer 
-  authentication_classes =[BasicAuthentication]
+  authentication_classes =[TokenAuthentication]
   permission_classes =[IsAuthenticated,IsAdminUser]
   
 class MovieDetailView(RetrieveAPIView):
@@ -108,27 +189,32 @@ class MovieDetailView(RetrieveAPIView):
   queryset = Movie.objects.all() 
   
   def retrieve(self,request,*args,**kwargs):
+    
     instance = super().get_object() 
     serializer = MovieDetailSerializer(instance)
     comment_serializer =  CommentDetailSerializer(Comment.objects.filter(movie=instance) ,many=True) 
     reply_serializer = ReplyDetailSerializer(Reply.objects.filter(movie=instance),many=True)
-    return Response({"movie":serializer.data,"comments":comment_serializer.data,"replies":reply_serializer.data})
+    is_premium_member = False
+    if request.user.is_authenticated:
+      is_premium_member = MySubscription.objects.filter(user=request.user).exists()
+      
+    return Response({"movie":serializer.data,"comments":comment_serializer.data,"replies":reply_serializer.data,"is_premium_member":is_premium_member})
     
 class MovieUpdateView(RetrieveUpdateAPIView):
   serializer_class = MovieSerializer
   queryset = Movie.objects.all()
-  authentication_classes = [BasicAuthentication]
+  authentication_classes = [TokenAuthentication]
   permission_classes =[IsAuthenticated,IsAdminUser]
 
 class MovieDeleteView(DestroyAPIView):
   serializer_class = MovieSerializer
   queryset = Movie.objects.all() 
-  authentication_classes =[BasicAuthentication]
+  authentication_classes =[TokenAuthentication]
   permission_classes =[IsAdminUser,IsAuthenticated]
 
 
 class PaymentHistoryView(ListAPIView):
-  authentication_classes = [BasicAuthentication]
+  authentication_classes = [TokenAuthentication]
   permission_classes =[IsAuthenticated]
   
   def get_queryset(self,*args,**kwargs):
@@ -141,7 +227,7 @@ class PaymentHistoryView(ListAPIView):
   
   
 class MyMoviesListView(ListAPIView):
-  authentication_classes = [BasicAuthentication]
+  authentication_classes = [TokenAuthentication]
   permission_classes =[IsAuthenticated]
   
   def get_queryset(self,*args,**kwargs):
@@ -154,7 +240,7 @@ class MyMoviesListView(ListAPIView):
 
 class MyMovieDeleteView(DestroyAPIView):
   http_method_names = ['get','post', 'delete']
-  authentication_classes = [BasicAuthentication]
+  authentication_classes = [TokenAuthentication]
   permission_classes = [IsAuthenticated]
   
   def get_object(self,*args,**kwargs):
@@ -178,37 +264,37 @@ class MyMovieDeleteView(DestroyAPIView):
 class CommentCreateView(CreateAPIView):
   serializer_class = CommentSerializer 
   queryset = Comment.objects.all() 
-  authentication_classes = [BasicAuthentication]
+  authentication_classes = [TokenAuthentication]
   permission_classes=[IsAuthenticated]
   
 class CommentUpdateView(RetrieveUpdateAPIView):
   serializer_class = CommentSerializer 
   queryset = Comment.objects.all() 
-  authentication_classes =[BasicAuthentication]
+  authentication_classes =[TokenAuthentication]
   permission_classes =[IsAuthenticated]
   
 class CommentDeleteView(DestroyAPIView):
   serializer_class = CommentSerializer 
   queryset = Comment.objects.all() 
-  authentication_classes =[BasicAuthentication]
+  authentication_classes =[TokenAuthentication]
   permission_classes=[IsAuthenticated]
 
 class ReplyCreateView(CreateAPIView):
   serializer_class = ReplySerializer
   queryset = Reply.objects.all() 
-  authentication_classes =[BasicAuthentication]
+  authentication_classes =[TokenAuthentication]
   permission_classes=[IsAuthenticated]
   
 class ReplyUpdateView(RetrieveUpdateAPIView):
   serializer_class = ReplySerializer
   queryset = Reply.objects.all() 
-  authentication_classes =[BasicAuthentication]
+  authentication_classes =[TokenAuthentication]
   permission_classes=[IsAuthenticated]
 
 class ReplyDeleteView(DestroyAPIView):
   serializer_class = ReplySerializer
   queryset = Reply.objects.all() 
-  authentication_classes =[BasicAuthentication]
+  authentication_classes =[TokenAuthentication]
   permission_classes=[IsAuthenticated]
 
 
@@ -239,7 +325,7 @@ def perform_unlike(id,user_id,model,type="like"):
   
   
 class LikeCommentView(APIView):
-  authentication_classes =[BasicAuthentication]
+  authentication_classes =[TokenAuthentication]
   permission_classes =[IsAuthenticated]
   http_method_names = ["post"]
   
@@ -249,7 +335,7 @@ class LikeCommentView(APIView):
 
 class LikeReplyView(APIView):
   http_method_names =["post"]
-  authentication_classes=[BasicAuthentication]
+  authentication_classes=[TokenAuthentication]
   permission_classes = [IsAuthenticated]
   
   def post(self,request,format=None):
@@ -259,7 +345,7 @@ class LikeReplyView(APIView):
 
 class UnLikeCommentView(APIView):
   http_method_names = ["post"]
-  authentication_classes =[BasicAuthentication]
+  authentication_classes =[TokenAuthentication]
   permission_classes = [IsAuthenticated]
   
   def post(self,request,format=None):
@@ -269,35 +355,141 @@ class UnLikeCommentView(APIView):
   
 class UnLikeReplyView(APIView):
   http_method_names=["post"]
-  authentication_classes =[BasicAuthentication]
+  authentication_classes =[TokenAuthentication]
   permission_classes =[IsAuthenticated]
   
   def post(self,request,format=None):
     resp = perform_unlike(request.data.get("id"),request.user.id,Reply,"unlike")
     return Response({"status":resp})
 
+
+class MovieSearchView(ListAPIView):
+  serializer_class = MovieDetailSerializer 
+  queryset = Movie.objects.all()
+  filter_backends =[SearchFilter]
+  # symbol ==> ^ start with , = extact match
+  search_fields = ["^name","=languages__name","=category__name","=country"]
+  
+class WatchMyMovieView(RetrieveAPIView):
+  authentication_classes=[TokenAuthentication]
+  permission_classes=[IsAuthenticated]
+  
+  def get_object(self,*args,**kwargs):
+    movie = MyMovies.objects.filter(id=self.kwargs["pk"])
+    if movie.exists():
+      movie = movie.first() 
+      if movie.user == self.request.user:
+        return movie 
+      return 403
+    return 404
+  
+  def retrieve(self,request,*args,**kwargs):
+    instance = self.get_object() 
+    if instance == 404:
+      return Response(status=404)
+    if instance == 403:
+      return Response(status=403)
+    serializer = MyMoviesSerializer(instance)
+    return Response(serializer.data,status=200)
+
+class SubscriptionsListView(ListAPIView):
+  serializer_class = SubscriptionSerializer 
+  queryset = Subscription.objects.all() 
+
+class SubscriptionDetailView(RetrieveAPIView):
+  serializer_class = SubscriptionSerializer 
+  queryset = Subscription.objects.all() 
+
+class MySubscriptionListView(ListAPIView):
+  authentication_classes=[TokenAuthentication]
+  permission_classes=[IsAuthenticated]
+  
+  def get_queryset(self):
+    return MySubscription.objects.filter(user=self.request.user)
+  
+  def list(self,request,*args,**kwargs):
+    queryset = self.get_queryset() 
+    serializer = MySubscriptionSerializer(queryset,many=True)
+    return Response(serializer.data,status=200)
+
+class MySubscriptionDetailView(RetrieveAPIView):
+  authentication_classes =[TokenAuthentication]
+  permission_classes =[IsAuthenticated]
+
+  def get_object(self,*args,**kwargs):
+    subscription = MySubscription.objects.filter(id=self.kwargs["pk"])
+    if subscription.exists():
+      subscription = subscription.first() 
+      if subscription.user == self.request.user:
+        return subscription
+      return 403
+    return 404
+  
+  def retrieve(self,request,*args,**kwargs):
+    instance = self.get_object() 
+    if instance == 404:
+      return Response(status=404)
+    if instance == 403:
+      return Response(status=403)
+    serializer = MySubscriptionSerializer(instance)
+    return Response(serializer.data,status=200)
+  
+
 def generateOrderId():
   return f"order{random.randint(1,90000000)}"
   
-""" Here am using html(templates)  that's why i rendering to html page. if i`ll/you use ajax or any frontEnd framework/libraray then I'll/you-can send JsonResponse...
+""" Here am using html(templates).
+  that's why i rendering to html page.
+  if i`ll/you use ajax or any
+  frontEnd framework/libraray then 
+  I'll/you-can send JsonResponse...
 """ 
-   
+
+# Movie checkout
 def checkout(request):
   amount = 10000
   # return JsonResponse({"amount":amount})
   return render(request,"checkout.html",{"amount":amount})
   
-def delete_cookies(resp):
-  resp.delete_cookie("email")
-  resp.delete_cookie("movie_id")
-  return 
+
+class SubscriptionView(View):
+  def get(self,request):
+    resp = render(request,"subscription.html")
+    return resp 
+  
+  def post(self,request):
+    context ={}
+ 
+    plan = self.request.POST.get("plan")
+    
+    subscription = Subscription.objects.filter(plan=plan)
+    if not subscription.exists():
+      return HttpResponse("No subscription")
+    subscription = subscription.first()
+    amount = subscription.price
+    if subscription.discount:
+      amount -= subscription.discount 
+    orderId = generateOrderId()
+    context["txnToken"] = paytm.initiateTransaction(amount,orderId)
+    
+    context ["orderId"] = orderId 
+    context["mid"] = settings.MID
+    if not context["txnToken"]:
+      # JsonResponse
+      return HttpResponse("payment failure or system error.. plaese try again..")
+    context["subscription"] = plan
+    resp = render(request,"paytm.html",context)
+    resp.delete_cookie("movie_id")
+    resp.set_cookie("subscription",plan)
+    resp.set_cookie("email",request.user.email)
+    return resp 
+
 
 class MovieBuyView(View):
   template_name = "paytm.html"
   
   def get(self,request):
     resp = render(request,template_name)
-    delete_cookies(resp)
     return resp 
   
   def post(self,request):
@@ -316,16 +508,34 @@ class MovieBuyView(View):
       return HttpResponse("payment failure or system error.. plaese try again..")
       
     # send json data 
-    #return JsonResponse(context)
+    # return JsonResponse(context)
     
     resp = render(request,"paytm.html",context)
+    resp.delete_cookie("plan")
     resp.set_cookie("email",request.user.email)
     resp.set_cookie("movie_id",movie_id)
     return resp 
 
+
+def add_my_subscription(user,subscription,payment):
+  expire = None 
+  if subscription.plan == "one-year":
+    expire = timezone.now()+timedelta(days=365)
+  if subscription.plan == "one-month":
+    expire = timezone.now()+timedelta(days=29)
+  if subscription.plan == "one-week":
+    expire = timezone.now()+timedelta(days=7)
+  
+  my_subscription = MySubscription(user=user,payment=payment,subscription=subscription,expire=expire)
+  my_subscription.save() 
+  
+  return my_subscription
+
+
+  
+
 @csrf_exempt 
 def payment_response(request):
- 
   if request.method == "POST":
     data = request.POST.dict() 
     transaction_data = dict({(key,value) for key,value in data.items() if hasattr(Payment(),key)})
@@ -333,30 +543,32 @@ def payment_response(request):
     payment = Payment(**transaction_data)
     payment.save() 
     if data["STATUS"] == "TXN_SUCCESS":
-      movie = Movie.objects.get(id=request.COOKIES["movie_id"])
-      MyMovies.objects.create(user=transaction_data["user"],movie=movie)
-     
-      resp = render(request,"order_status.html",{"order_status":payment})
-      delete_cookies(resp)
-      return resp 
+      # User Buyed Movie 
+      if request.COOKIES.get("movie_id"):
+        movie = Movie.objects.get(id=request.COOKIES["movie_id"])
+        MyMovies.objects.create(user=transaction_data["user"],movie=movie)
+      # User Subscription 
+        return JsonResponse({"result":"Movie addedd"})
+        
+        
+      if request.COOKIES.get("subscription"):
+        subscription = Subscription.objects.get(plan=request.COOKIES["subscription"])
+        my_subscription = add_my_subscription(transaction_data["user"],subscription,payment)
+        return JsonResponse({"result":"Subscription done"})
+        
       
     if data["STATUS"] == "TXN_FAILURE":
-      resp = render(request,"order_status.html",{"order_status":payment})
-      delete_cookies(resp)
-      return resp 
-      
-    return HttpResponse("Something went wrong..")
-  
+      if request.COOKIES.get("subscription"):
+        return JsonResponse({"result":"Subscription Failed"})
+      return JsonResponse({"result":"movie buying Failed"})
+
  
   checksum = request.POST.get("CHECKSUMHASH")
   if checksum:
       verify_checksum = Checksum.verifySignature(data,settings.MKEY,checksum)
       if not verify_checksum:
-        return HttpResponse("Oops...something went wrong..")
+        return JsonResponse({"something went wrong"})
    
   return render(request,"process_transaction.html",{"data":data})
-
-   
-  
 
   

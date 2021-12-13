@@ -1,6 +1,22 @@
 from rest_framework import serializers
-from  .models import Movie,Actors,Category,Language ,Payment,MyMovies,Comment ,Reply
+from  .models import Movie,Actors,Category,Language ,Payment,MyMovies,Comment ,Reply,User,Subscription
+from django.contrib.auth.hashers import make_password 
+from  rest_framework.authtoken.models import Token 
 
+
+
+class UserSerializer(serializers.ModelSerializer):
+  class Meta:
+    model = User 
+    fields = ["username","email","first_name","last_name","password"]
+    
+  def create(self,validated_data):
+    validated_data["password"] = make_password(validated_data["password"])
+    instance = User(**validated_data)
+    instance.save() 
+    Token.objects.create(user=instance)
+    return instance 
+  
 class MovieSerializer(serializers.ModelSerializer):
   class Meta:
     model = Movie 
@@ -27,7 +43,6 @@ class PaymentHistorySerializer(serializers.ModelSerializer):
     model = Payment 
     fields = "__all__"
 
-
     
 class CommentSerializer(serializers.ModelSerializer):
   class Meta:
@@ -42,4 +57,8 @@ class ReplySerializer(serializers.ModelSerializer):
     fields = "__all__" 
     
 
-  
+class SubscriptionSerializer(serializers.ModelSerializer):
+  class Meta:
+    model = Subscription 
+    fields = "__all__"
+    

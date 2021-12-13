@@ -1,5 +1,5 @@
 from rest_framework import serializers 
-from  .models import Movie,Actors,Category,Language ,Payment,MyMovies,Comment ,Reply 
+from  .models import Movie,MyMovies,Comment,Reply ,Subscription,MySubscription
 
 class MovieDetailSerializer(serializers.ModelSerializer):
   class Meta:
@@ -23,4 +23,11 @@ class ReplyDetailSerializer(serializers.ModelSerializer):
   class Meta:
     model = Reply 
     fields = "__all__"
-    depth = 1 
+    depth = 1  
+
+class MySubscriptionSerializer(serializers.ModelSerializer):
+  class Meta:
+    model = MySubscription 
+    fields = "__all__"
+    depth = 1
+    
