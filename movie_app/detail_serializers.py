@@ -1,5 +1,5 @@
 from rest_framework import serializers 
-from  .models import Movie,MyMovies,Comment,Reply ,Subscription,MySubscription
+from  .models import Movie,MyMovies,Comment,Reply ,Subscription,MySubscription,MovieActorRole,MoviesPhoto
 
 class MovieDetailSerializer(serializers.ModelSerializer):
   class Meta:
@@ -30,4 +30,16 @@ class MySubscriptionSerializer(serializers.ModelSerializer):
     model = MySubscription 
     fields = "__all__"
     depth = 1
+    
+class ActorRoleDetailSerializer(serializers.ModelSerializer):
+  class Meta:
+    model = MovieActorRole  
+    fields = "__all__"
+    depth = 1 
+    
+class MoviesPhotosDetailSerializer(serializers.ModelSerializer):
+  class Meta:
+    model = MoviesPhoto 
+    fields = "__all__"
+    
     

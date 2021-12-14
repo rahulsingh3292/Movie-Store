@@ -26,37 +26,50 @@ class Actors(models.Model):
   country = models.CharField(max_length=150,choices=COUNTRY)
   languages = models.ManyToManyField(Language,blank=True)
   
-  
   def __str__(self):
     return  self.first_name + self.last_name
 
 
+
+class MoviesPhoto(models.Model):
+  movie =  models.ForeignKey("Movie",on_delete=models.CASCADE)
+  photo = models.ImageField(upload_to="movies/images/",null=True,blank=True)
+  
+  def __str__(self):
+    return self.movie.name 
+
 class Movie(models.Model):
   name = models.CharField(max_length=100)
   description = models.TextField(blank=True)
-  url = models.SlugField(max_length=300,blank=True)
   price = models.FloatField(default=0.00)
   category = models.ManyToManyField(Category,blank=True)
   actors = models.ManyToManyField(Actors,blank=True)
   languages = models.ManyToManyField(Language,blank=True) 
   release_date = models.DateField(auto_now_add=True,blank=True,null=True)
   length = models.TimeField(blank=True,null=True)
-  photo = models.ImageField(upload_to="Images/",blank=True,null=True)
+  cover_photo = models.ImageField(upload_to="Images/",blank=True,null=True)
   country = models.CharField(max_length=200,choices=COUNTRY,blank=True)
+  photos = models.ManyToManyField(MoviesPhoto,blank=True,related_name="movie_photos")
+  
   
   def __str__(self):
     return self.name 
   
   def categories(self):
     return str([i.name for i in self.category.all()])
+
+class MovieActorRole(models.Model):
+  actor = models.ForeignKey(Actors,on_delete=models.CASCADE)
+  role = models.CharField(max_length=150)
+  movie = models.ForeignKey(Movie,on_delete=models.CASCADE)
   
-      
+  def __str__(self):
+    return self.role
   
 class MyMovies(models.Model):
   movie = models.ForeignKey(Movie,on_delete=models.SET_NULL,null=True)
   user = models.ForeignKey(User,on_delete=models.CASCADE)
 
-  
   def __str__(self):
     return self.user.username
 
@@ -133,3 +146,4 @@ class MySubscription(models.Model):
   
   def __str__(self):
     return self.user.username 
+

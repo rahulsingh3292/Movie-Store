@@ -67,6 +67,10 @@ urlpatterns = [
     
     path("create/reply/",views.ReplyCreateView.as_view()), 
     
+    path("create/movie/photo/",views.MoviesPhotoCreateView.as_view()), 
+    path("create/actor/role/",views.ActorRoleCreateView.as_view()), 
+    
+    
     # delete Api
     
     path("delete/category/<str:name>/",views.CategoryDeleteView.as_view()),

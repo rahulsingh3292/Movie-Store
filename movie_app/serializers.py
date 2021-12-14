@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from  .models import Movie,Actors,Category,Language ,Payment,MyMovies,Comment ,Reply,User,Subscription
+from  .models import Movie,Actors,Category,Language ,Payment,MyMovies,Comment ,Reply,User,Subscription,MovieActorRole,MoviesPhoto 
 from django.contrib.auth.hashers import make_password 
 from  rest_framework.authtoken.models import Token 
 
@@ -61,4 +61,13 @@ class SubscriptionSerializer(serializers.ModelSerializer):
   class Meta:
     model = Subscription 
     fields = "__all__"
-    
+
+class MoviesPhotoSerializer(serializers.ModelSerializer):
+  class Meta:
+    model = MoviesPhoto 
+    fields = "__all__"
+
+class ActorRoleSerializer(serializers.ModelSerializer):
+  class Meta:
+    model = MovieActorRole 
+    fields = "__all__"

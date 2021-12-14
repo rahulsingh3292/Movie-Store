@@ -1,15 +1,15 @@
 from django.shortcuts import render,redirect 
 from django.http import HttpResponse,JsonResponse
 from django.contrib.auth.models import User 
-import random 
-from datetime import timedelta
-from django.utils import timezone 
 from rest_framework.generics import (ListAPIView,CreateAPIView,RetrieveAPIView,RetrieveUpdateAPIView,DestroyAPIView)
 from rest_framework.views import APIView
-from  .models import (Movie,Category,Actors,Language,Payment,MyMovies,Comment,Reply,User,MySubscription,Subscription)
+from  .models import (Movie,Category,Actors,Language,Payment,MyMovies,Comment,Reply,User,MySubscription,Subscription,MovieActorRole,MoviesPhoto)
 from  .import paytm 
 from  .serializers import (MovieSerializer ,CategorySerilaizer,ActorSerializer,LanguageSerilaizer,PaymentHistorySerializer,CommentSerializer,UserSerializer,ReplySerializer,SubscriptionSerializer)
+import random
+from  .serializers import ActorRoleSerializer,MoviesPhotoSerializer
 from  .detail_serializers import (CommentDetailSerializer,ReplyDetailSerializer,MovieDetailSerializer,MyMoviesSerializer,MySubscriptionSerializer)
+from  .detail_serializers import MoviesPhotosDetailSerializer,ActorRoleDetailSerializer
 from django.views.generic import View,TemplateView 
 from  django.conf import settings 
 from  django.views.decorators.csrf import csrf_exempt 
@@ -17,17 +17,9 @@ from rest_framework.authentication import TokenAuthentication
 from rest_framework.permissions import IsAdminUser,IsAuthenticated
 from rest_framework.response import Response 
 from rest_framework.filters import SearchFilter
-from rest_framework.authtoken.models  import Token
 from django.contrib.auth import authenticate
+from  .import extras
 # Create your views here
-
-def get_or_generate_token(user):
-  token = Token.objects.filter(user=user)
-  if token.exists():
-    return token.first().key 
-  token = Token(user=user) 
-  token.save() 
-  return token.key 
 
 
 class UserLoginView(APIView):
@@ -37,12 +29,9 @@ class UserLoginView(APIView):
     password = request.data.get("password")
     user = authenticate(request,username=username,password=password)
     if user is not None:
-      token = get_or_generate_token(user)
+      token = extras.get_or_generate_token(user)
       return Response({"result":"success","token":token},status=200)
     return Response({"result":"Invalid Credentials provided"},status=401)
-    
-    
-
 
 class UserCreateView(CreateAPIView):
   serializer_class = UserSerializer
@@ -64,17 +53,17 @@ class UserDeleteView(DestroyAPIView):
 
 class UserDetailView(RetrieveAPIView):
   authentication_classes =[TokenAuthentication]
-  permission_classes = [IsAuthenticated]
-  
+  permission_classes=[IsAuthenticated]
+   
   def get_object(self,*args,**kwargs):
-    instance = User.objects.filter(id=self.kwargs["pk"])
+    instance = User.objects.filter(id=self.kwargs["pk"]) 
     if instance.exists():
-      instance = instance.first() 
-      if instance == self.request.user:
-        return instance
+      instance = instance.first()
+      if instance == self.request.user :
+        return instance 
       return 403 
     return 404 
-      
+    
   
   def retrieve(self,request,*args,**kwargs):
     instance = self.get_object() 
@@ -85,8 +74,7 @@ class UserDetailView(RetrieveAPIView):
       
     serializer = UserSerializer(instance)
     return Response(serializer.data,status=200)
-  
-
+ 
 class ActorCreateView(CreateAPIView):
   serializer_class = ActorSerializer 
   queryset = Actors.objects.all()
@@ -125,7 +113,15 @@ class ActorDeleteView(DestroyAPIView):
   queryset = Actors.objects.all()
   authentication_classes =[TokenAuthentication]
   permission_classes=[IsAuthenticated,IsAdminUser]
-  
+
+class ActorRoleCreateView(CreateAPIView):
+  serializer_class = ActorRoleSerializer 
+  queryset = MovieActorRole.objects.all() 
+  authentication_classes =[TokenAuthentication]
+  permission_classes=[IsAdminUser,IsAuthenticated]
+
+
+
 class LanguageCreateView(CreateAPIView):
   serializer_class = LanguageSerilaizer
   queryset = Language.objects.all()
@@ -189,16 +185,17 @@ class MovieDetailView(RetrieveAPIView):
   queryset = Movie.objects.all() 
   
   def retrieve(self,request,*args,**kwargs):
-    
     instance = super().get_object() 
     serializer = MovieDetailSerializer(instance)
     comment_serializer =  CommentDetailSerializer(Comment.objects.filter(movie=instance) ,many=True) 
+    movie_photos = MoviesPhotosDetailSerializer(MoviesPhoto.objects.filter(movie=instance),many=True)
+    actor_roles = ActorRoleDetailSerializer(MovieActorRole.objects.filter(movie=instance),many=True)
     reply_serializer = ReplyDetailSerializer(Reply.objects.filter(movie=instance),many=True)
     is_premium_member = False
     if request.user.is_authenticated:
       is_premium_member = MySubscription.objects.filter(user=request.user).exists()
       
-    return Response({"movie":serializer.data,"comments":comment_serializer.data,"replies":reply_serializer.data,"is_premium_member":is_premium_member})
+    return Response({"movie":serializer.data,"comments":comment_serializer.data,"replies":reply_serializer.data,"is_premium_member":is_premium_member,"actor_roles":actor_roles.data,"movie_photos":movie_photos.data})
     
 class MovieUpdateView(RetrieveUpdateAPIView):
   serializer_class = MovieSerializer
@@ -211,6 +208,12 @@ class MovieDeleteView(DestroyAPIView):
   queryset = Movie.objects.all() 
   authentication_classes =[TokenAuthentication]
   permission_classes =[IsAdminUser,IsAuthenticated]
+  
+class MoviesPhotoCreateView(CreateAPIView):
+  serializer_class = MoviesPhotoSerializer 
+  queryset = MoviesPhoto.objects.all() 
+  authentication_classes =[TokenAuthentication]
+  permission_classes=[IsAuthenticated,IsAdminUser]
 
 
 class PaymentHistoryView(ListAPIView):
@@ -244,13 +247,14 @@ class MyMovieDeleteView(DestroyAPIView):
   permission_classes = [IsAuthenticated]
   
   def get_object(self,*args,**kwargs):
-    movie = MyMovies.objects.filter(id=self.kwargs["pk"])
-    if movie.exists():
-      movie = movie.first() 
-      if movie.user == self.request.user:
-        return movie 
-      return 403
-    return 404
+    instance = MyMovies.objects.filter(id=self.kwargs["pk"]) 
+    if instance.exists():
+      instance = instance.first()
+      if instance.user == self.request.user :
+        return instance 
+      return 403 
+    return 404 
+ 
 
   def destroy(self,request,*args,**kwargs):
     instance = self.get_object() 
@@ -297,31 +301,6 @@ class ReplyDeleteView(DestroyAPIView):
   authentication_classes =[TokenAuthentication]
   permission_classes=[IsAuthenticated]
 
-
-def perform_like(id,user_id,model,type="like"):
-  # id => is for comment_id or reply_id
-    
-  user = User.objects.get(id=user_id)
-  instance = model.objects.filter(id=id) 
-  if not instance.exists():
-    return 404 
-  instance = instance.first() 
-    
-  if type == "unlike":
-    if instance.unlikes.filter(id=user_id).exists():
-      instance.unlikes.remove(user)
-      return 204 
-    instance.unlikes.add(user)
-    return 201 
-    
-  if instance.likes.filter(id=user.id).exists():
-    instance.likes.remove(user)
-    return 204 
-  instance.likes.add(user)
-  return 201 
-
-def perform_unlike(id,user_id,model,type="like"):
-  return perform_like(id,user_id,model,type)
   
   
 class LikeCommentView(APIView):
@@ -330,7 +309,7 @@ class LikeCommentView(APIView):
   http_method_names = ["post"]
   
   def post(self,request,format=None):
-    like_resp = perform_like(request.data.get("id"),request.user.id,Comment)
+    like_resp = extras.perform_like(request.data.get("id"),request.user.id,Comment)
     return Response({"status":like_resp})
 
 class LikeReplyView(APIView):
@@ -339,7 +318,7 @@ class LikeReplyView(APIView):
   permission_classes = [IsAuthenticated]
   
   def post(self,request,format=None):
-    like_resp = perform_like(request.data.get("id"),request.user.id,Reply)
+    like_resp = extras.perform_like(request.data.get("id"),request.user.id,Reply)
     return Response({"status":like_resp})
   
 
@@ -349,7 +328,7 @@ class UnLikeCommentView(APIView):
   permission_classes = [IsAuthenticated]
   
   def post(self,request,format=None):
-    resp = perform_unlike(request.data.get("id"),request.user.id,Comment,"unlike")
+    resp = extras.perform_unlike(request.data.get("id"),request.user.id,Comment,"unlike")
     return Response({"status":resp})
 
   
@@ -359,7 +338,7 @@ class UnLikeReplyView(APIView):
   permission_classes =[IsAuthenticated]
   
   def post(self,request,format=None):
-    resp = perform_unlike(request.data.get("id"),request.user.id,Reply,"unlike")
+    resp = extras.perform_unlike(request.data.get("id"),request.user.id,Reply,"unlike")
     return Response({"status":resp})
 
 
@@ -375,13 +354,13 @@ class WatchMyMovieView(RetrieveAPIView):
   permission_classes=[IsAuthenticated]
   
   def get_object(self,*args,**kwargs):
-    movie = MyMovies.objects.filter(id=self.kwargs["pk"])
-    if movie.exists():
-      movie = movie.first() 
-      if movie.user == self.request.user:
-        return movie 
-      return 403
-    return 404
+    instance = MyMovies.objects.filter(id=self.kwargs["pk"]) 
+    if instance.exists():
+      instance = instance.first()
+      if instance.user == self.request.user :
+        return instance 
+      return 403 
+    return 404 
   
   def retrieve(self,request,*args,**kwargs):
     instance = self.get_object() 
@@ -415,15 +394,15 @@ class MySubscriptionListView(ListAPIView):
 class MySubscriptionDetailView(RetrieveAPIView):
   authentication_classes =[TokenAuthentication]
   permission_classes =[IsAuthenticated]
-
+  
   def get_object(self,*args,**kwargs):
-    subscription = MySubscription.objects.filter(id=self.kwargs["pk"])
-    if subscription.exists():
-      subscription = subscription.first() 
-      if subscription.user == self.request.user:
-        return subscription
-      return 403
-    return 404
+    instance = MySubscription.objects.filter(id=self.kwargs["pk"]) 
+    if instance.exists():
+      instance = instance.first()
+      if instance.user == self.request.user :
+        return instance 
+      return 403 
+    return 404 
   
   def retrieve(self,request,*args,**kwargs):
     instance = self.get_object() 
@@ -447,6 +426,7 @@ def generateOrderId():
 
 # Movie checkout
 def checkout(request):
+  # movie checkout page 
   amount = 10000
   # return JsonResponse({"amount":amount})
   return render(request,"checkout.html",{"amount":amount})
@@ -517,23 +497,6 @@ class MovieBuyView(View):
     return resp 
 
 
-def add_my_subscription(user,subscription,payment):
-  expire = None 
-  if subscription.plan == "one-year":
-    expire = timezone.now()+timedelta(days=365)
-  if subscription.plan == "one-month":
-    expire = timezone.now()+timedelta(days=29)
-  if subscription.plan == "one-week":
-    expire = timezone.now()+timedelta(days=7)
-  
-  my_subscription = MySubscription(user=user,payment=payment,subscription=subscription,expire=expire)
-  my_subscription.save() 
-  
-  return my_subscription
-
-
-  
-
 @csrf_exempt 
 def payment_response(request):
   if request.method == "POST":
@@ -547,13 +510,13 @@ def payment_response(request):
       if request.COOKIES.get("movie_id"):
         movie = Movie.objects.get(id=request.COOKIES["movie_id"])
         MyMovies.objects.create(user=transaction_data["user"],movie=movie)
-      # User Subscription 
+      
         return JsonResponse({"result":"Movie addedd"})
         
         
       if request.COOKIES.get("subscription"):
         subscription = Subscription.objects.get(plan=request.COOKIES["subscription"])
-        my_subscription = add_my_subscription(transaction_data["user"],subscription,payment)
+        extras.add_my_subscription(transaction_data["user"],subscription,payment)
         return JsonResponse({"result":"Subscription done"})
         
       
