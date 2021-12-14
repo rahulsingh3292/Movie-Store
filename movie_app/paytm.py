@@ -2,8 +2,8 @@ from .import Checksum
 from django.conf import settings 
 import json,requests 
 
-MID = "kFvGLU24542639894204"
-MKEY = "yDsk%PnJ!!xkt4hH"
+MID = settings.MID 
+MKEY = settings.MKEY
 headers = {
   "Content-type":"application/json"
 }
