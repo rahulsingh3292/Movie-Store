@@ -88,7 +88,7 @@ class ActorUpdateView(RetrieveUpdateAPIView):
   permission_classes = [IsAdminUser,IsAuthenticated]
 
 class ActorDetailView(RetrieveAPIView):
-  serializer_class = ActorUpdateView
+  serializer_class = ActorSerializer
   queryset = Actors.objects.all()
   
   def retrieve(self,request,*args,**kwargs):
